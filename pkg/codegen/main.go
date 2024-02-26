@@ -40,7 +40,13 @@ func main() {
 					managementv3.ProjectCatalog{},
 					managementv3.ClusterCatalog{},
 				},
-				GenerateTypes: true,
+			},
+			"project.cattle.io": {
+				PackageName: "project.cattle.io",
+				Types: []interface{}{
+					// All structs with an embedded ObjectMeta field will be picked up
+					"./vendor/github.com/rancher/rancher/pkg/apis/project.cattle.io/v3",
+				},
 			},
 			"catalog.cattle.io": {
 				PackageName: "catalog.cattle.io",
