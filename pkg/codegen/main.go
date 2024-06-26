@@ -206,7 +206,6 @@ func replaceImports(dir string) error {
 			if err = os.WriteFile(path, replacement, 0666); err != nil {
 				return err
 			}
-
 		}
 
 		if strings.HasPrefix(info.Name(), "factory") {
@@ -214,11 +213,21 @@ func replaceImports(dir string) error {
 			if err != nil {
 				return err
 			}
-			replacement = bytes.Replace(input, []byte("c.ControllerFactory())"), []byte("c.ControllerFactory(), c.Opts.TS)"), -1)
+			replacement = bytes.Replace(input, []byte("New(c.ControllerFactory())"), []byte("New(c.ControllerFactory(), c.Opts.TS)"), -1)
 			if err = os.WriteFile(path, replacement, 0666); err != nil {
 				return err
 			}
+		}
 
+		if strings.HasPrefix(info.Name(), "factory") {
+			input, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			replacement = bytes.Replace(input, []byte("controller.NewSharedControllerFactoryWithAgent(userAgent, c.ControllerFactory())"), []byte("controller.NewSharedControllerFactoryWithAgent(userAgent, c.ControllerFactory()), c.Opts.TS"), -1)
+			if err = os.WriteFile(path, replacement, 0666); err != nil {
+				return err
+			}
 		}
 
 		if strings.HasPrefix(info.Name(), "interface") {
