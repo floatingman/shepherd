@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -304,37 +305,65 @@ func replaceImports(dir string) error {
 	})
 }
 
-func addImport(fset *token.FileSet, filename string, importPath string) {
+func addImport(fset *token.FileSet, filename string, importPath string) error {
+	if importPath == "" {
+		return errors.New("empty import path")
+	}
+
 	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// Check if session import is there and do nothing
 	for _, i := range node.Imports {
 		if i.Path.Value == importPath {
 			println("Import already included in file:", filename)
-			return
+			return nil
 		}
 	}
 
-	// Add import
-	node.Imports = append(node.Imports, &ast.ImportSpec{
+	// Create a new import spec
+	newImport := &ast.ImportSpec{
 		Path: &ast.BasicLit{
+			Kind:  token.STRING,
 			Value: importPath,
 		},
-	})
+	}
+
+	// Insert the new import spec in the right place
+	found := false
+	for _, decl := range node.Decls {
+		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			genDecl.Specs = append(genDecl.Specs, newImport)
+			found = true
+			break
+		}
+	}
+
+	// If no import declaration was found, create a new one
+	if !found {
+		node.Decls = append([]ast.Decl{
+			&ast.GenDecl{
+				Tok: token.IMPORT,
+				Specs: []ast.Spec{
+					newImport,
+				},
+			},
+		}, node.Decls...)
+	}
 
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, fset, node)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	err = os.WriteFile(filename, buf.Bytes(), 0644)
+	err = os.WriteFile(filename, buf.Bytes(), 0666)
 	if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func processFile(path string, info os.FileInfo, err error) error {
@@ -344,7 +373,10 @@ func processFile(path string, info os.FileInfo, err error) error {
 	}
 	if !info.IsDir() && strings.HasSuffix(info.Name(), "interface.go") {
 		fset := token.NewFileSet()
-		addImport(fset, path, importPath)
+		err := addImport(fset, path, importPath)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
