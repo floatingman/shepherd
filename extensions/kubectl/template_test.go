@@ -100,13 +100,14 @@ func TestCreateJobAndRunKubectlCommandsProvisionsViaProxy(t *testing.T) {
 	defer ts.Close()
 
 	insecure, cleanup := true, true
+	token := fakeTokenID + ":secret"
 	rancherConfig := &rancher.Config{
 		Host:     strings.TrimPrefix(ts.URL, "https://"),
 		Insecure: &insecure,
 		Cleanup:  &cleanup,
 	}
 
-	client, err := rancher.NewClientForConfig(fakeTokenID+":secret", rancherConfig, session.NewSession())
+	client, err := rancher.NewClientForConfig(token, rancherConfig, session.NewSession())
 	if err != nil {
 		t.Fatalf("constructing rancher client: %v", err)
 	}
@@ -132,18 +133,22 @@ func TestCreateJobAndRunKubectlCommandsProvisionsViaProxy(t *testing.T) {
 
 	var createPaths []string
 	sawProxyWatch, sawGenerateKubeconfig := false, false
+	wantAuthorization := "Bearer " + token
 	for _, req := range requests {
 		if strings.Contains(req.path, "generateKubeconfig") {
 			sawGenerateKubeconfig = true
 		}
-		if req.method == http.MethodPost && strings.HasPrefix(req.path, proxyPrefix) {
+
+		isProxyCreate := req.method == http.MethodPost && strings.HasPrefix(req.path, proxyPrefix)
+		isProxyWatch := req.method == http.MethodGet && req.path == wantWatchPath
+		if isProxyCreate {
 			createPaths = append(createPaths, req.path)
 		}
-		if req.method == http.MethodGet && req.path == wantWatchPath {
+		if isProxyWatch {
 			sawProxyWatch = true
 		}
-		if req.method == http.MethodPost && strings.HasPrefix(req.path, proxyPrefix) && !strings.HasPrefix(req.authorization, "Bearer ") {
-			t.Errorf("create request %s has no bearer authorization, got %q", req.path, req.authorization)
+		if (isProxyCreate || isProxyWatch) && req.authorization != wantAuthorization {
+			t.Errorf("request %s %s has authorization %q, want %q", req.method, req.path, req.authorization, wantAuthorization)
 		}
 	}
 
